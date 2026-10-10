@@ -1,0 +1,41 @@
+name: trusted-assistance
+services:
+  mongo:
+    image: mongo:8.0
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
+    ports: ['127.0.0.1:${MONGO_PORT:-27017}:27017']
+    volumes: ['mongo-data:/data/db']
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand({ping:1}).ok']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+  mongo-init:
+    image: mongo:8.0
+    depends_on:
+      mongo: { condition: service_healthy }
+    entrypoint:
+      [
+        'mongosh',
+        '--host',
+        'mongo:27017',
+        '--quiet',
+        '--eval',
+        'try { rs.status() } catch (e) { if (e.codeName === "NotYetInitialized") rs.initiate({_id:"rs0",members:[{_id:0,host:"mongo:27017"}]}); else throw e; }',
+      ]
+    restart: 'no'
+  redis:
+    image: redis:7.4-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports: ['127.0.0.1:${REDIS_PORT:-6379}:6379']
+    volumes: ['redis-data:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+volumes:
+  mongo-data:
+  redis-data:
